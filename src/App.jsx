@@ -1,10 +1,12 @@
-import { AuthProvider } from './context/AuthContext';
-import Chat from './components/Chat';
-import UserList from './components/UserList';
-import AuthButtons from './components/AuthButtons';
-import './App.css';
+import { AuthProvider } from "./context/AuthContext";
+import Chat from "./components/Chat";
+import UserList from "./components/UserList";
+import AuthButtons from "./components/AuthButtons";
+import "./App.css";
+import { useState } from "react";
 
 function App() {
+  const [menuOpen,setMenuOPen]= useState(false);
   return (
     <AuthProvider>
       <div className="app">
@@ -13,7 +15,16 @@ function App() {
           <AuthButtons />
         </header>
         <main>
-          <UserList />
+          <button className="toggle-btn" onClick={()=>setMenuOPen(!menuOpen)}>
+            {!menuOpen?
+            '|||'
+            :  
+            'X'
+          }
+            </button>
+        <div className={`toggle-menu ${menuOpen ? "active" : ""}`}>
+            <UserList />
+          </div>
           <Chat />
         </main>
       </div>

@@ -229,3 +229,36 @@ button:focus,
     scale: 1.1;
   }
 }
+.toggle-menu{
+  overflow: hidden;
+  position: relative;
+}
+@media screen and (min-width :768px){
+.toggle-btn{
+  display: none;
+}
+}
+@media screen and (max-width :768px){
+  .toggle-menu {
+    overflow: hidden;
+    position: relative;
+}
+  #root{
+    width: 100%;
+  }
+  body{
+    width: 100%;
+        display: block;
+  }
+  .user-list{
+    position: absolute;
+    inset: 0;
+    min-height: 100vh;
+  }
+  .toggle-menu{
+    transition: all 0.52s ease-in-out;
+  }
+  .toggle-menu.active{
+    min-width: 270px;
+  }
+}
