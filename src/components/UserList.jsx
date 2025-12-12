@@ -1,238 +1,121 @@
+// src/components/UserList.jsx
 import { useEffect, useState } from "react";
-import {
-  collection,
-  onSnapshot,
-  doc,
-  setDoc,
-  serverTimestamp,
-  query,
-  where,
-  getDoc,
-} from "firebase/firestore";
+import { collection, onSnapshot, doc, setDoc, serverTimestamp, getDoc, query } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import { Search, Circle } from "lucide-react";
 
-const UserList = () => {
+const UserList = ({ selectedUser, setSelectedUser, setSidebarOpen }) => {
   const [users, setUsers] = useState([]);
   const { currentUser } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!currentUser) return;
 
     const userRef = doc(db, "users", currentUser.uid);
-
-    const updateStatus = async (isOnline) => {
-      try {
-        // First check if document exists
-        const docSnap = await getDoc(userRef);
-        if (!docSnap.exists()) {
-          // Create document if it doesn't exist
-          await setDoc(userRef, {
-            uid: currentUser.uid,
-            displayName:
-              currentUser.displayName || `User-${currentUser.uid.slice(0, 4)}`,
-            photoURL: currentUser.photoURL || null,
-            email: currentUser.email || null,
-            online: isOnline,
-            lastSeen: serverTimestamp(),
-          });
-        } else {
-          // Update existing document
-          await setDoc(
-            userRef,
-            {
-              online: isOnline,
-              lastSeen: serverTimestamp(),
-            },
-            { merge: true }
-          );
-        }
-      } catch (err) {
-        console.error("Status update error:", err);
-        setError("Failed to update status");
-      }
-    };
-
-    // Set online status when component mounts
-    updateStatus(true);
-
-    // Set up event listeners for window/tab closing
-    const handleBeforeUnload = async () => {
-      await updateStatus(false);
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
-    // Handle browser tab visibility changes
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        updateStatus(false);
+    const updateOnline = async (online) => {
+      const snap = await getDoc(userRef);
+      if (!snap.exists()) {
+        await setDoc(userRef, {
+          displayName: currentUser.displayName || "User",
+          photoURL: currentUser.photoURL || "https://i.imgur.com/6VBx3io.png",
+          online,
+          lastSeen: serverTimestamp(),
+        });
       } else {
-        updateStatus(true);
+        await setDoc(userRef, { online, lastSeen: serverTimestamp() }, { merge: true });
       }
     };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    updateOnline(true);
+    const handleVisibility = () => updateOnline(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("beforeunload", () => updateOnline(false));
 
     return () => {
-      // Cleanup
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      updateStatus(false);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      updateOnline(false);
     };
   }, [currentUser]);
 
   useEffect(() => {
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
+    if (!currentUser) return;
 
-    setLoading(true);
-    setError(null);
+    const q = query(collection(db, "users"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = [];
+      snapshot.forEach((doc) => {
+        if (doc.id === currentUser.uid) return;
+        const data = doc.data();
+        const lastSeen = data.lastSeen?.toDate();
+        const time = lastSeen
+          ? lastSeen.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+          : "just now";
 
-    try {
-      const q = query(
-        collection(db, "users")
-        // where('online', '==', true)
-      );
+        list.push({
+          id: doc.id,
+          ...data,
+          lastSeenTime: lastSeen ? (new Date().toDateString() === lastSeen.toDateString() ? `Today at ${time}` : time) : "Offline",
+        });
+      });
+      setUsers(list);
+    });
 
-      const unsubscribe = onSnapshot(
-        q,
-        (querySnapshot) => {
-          const usersData = [];
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            // Include all users except current user
-            if (doc.id !== currentUser.uid) {
-              const date = data.lastSeen?.toDate();
-              const options = {
-                month: "short",
-                day: "2-digit",
-                year: "numeric",
-              };
-              //if last seen today
-              const today = new Date();
-              const todayFormatted = today
-                .toLocaleDateString("en-US", options)
-                .replace(",", "")
-                .trim();
-              const lastSeenFormatted = date
-                .toLocaleString("en-US", options)
-                .replace(",", "")
-                .trim();
-              let lastSeenIsToday = todayFormatted === lastSeenFormatted;
-              // End the condition
-              usersData.push({
-                id: doc.id,
-                ...data,
-                lastSeen:
-                data.lastSeen?.toDate()?.toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true,
-                }).toLowerCase() || "just now",
-                lastSeenDayLong: date.toLocaleString("en-US", options),
-                lastSeenIsToday,
-              });
-            }
-          });
-
-          setUsers(usersData);
-          setLoading(false);
-        },
-        (err) => {
-          setError("Failed to load users");
-          setLoading(false);
-          console.error("Snapshot error:", err);
-        }
-      );
-
-      return unsubscribe;
-    } catch (err) {
-      setError("Error setting up query");
-      setLoading(false);
-      console.error("Setup error:", err);
-    }
+    return unsubscribe;
   }, [currentUser]);
 
-  if (error) {
-    return (
-      <div className="user-list error">
-        <h3>All Users</h3>
-        <div className="error-message">{error}</div>
-      </div>
-    );
-  }
-
-  if (!currentUser) {
-    return (
-      <div className="user-list">
-        <h3>All Users</h3>
-        <div className="login-prompt">Sign in to see who's online</div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="user-list loading">
-        <h3>All Users</h3>
-        <div className="loading-message">Loading...</div>
-      </div>
-    );
-  }
+  if (!currentUser) return <div className="p-8 text-center text-gray-500">Login to see users</div>;
 
   return (
-    <div className="user-list">
-      <h3>Online Users ({users.length})</h3>
-      <div className="user-scroll-container">
-        {users.length === 0 ? (
-          <div className="no-users">No other users online</div>
-        ) : (
-          <ul className="user-items">
-            {users.map((user) => (
-              <li key={user.id} className="user-item">
-                <div className="avatar-container">
-                  <img
-                    src={user.photoURL || "https://i.imgur.com/6VBx3io.png"}
-                    alt={user.displayName}
-                    className="user-avatar"
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = "https://i.imgur.com/6VBx3io.png";
-                    }}
-                  />
-                  <span
-                    className={`status-dot ${
-                      user.online ? "online" : "offline"
-                    }`}
-                  />
-                </div>
-                <div className="user-details">
-                  <span className="user-name">{user.displayName}</span>
-                  {user.online ? (
-                    <span className="green-dot"></span>
-                  ) : (
-                    <span className="red-dot"></span>
-                  )}
-                  <span className="user-status">
-                    {user.online
-                      ? "Online"
-                      : `Last seen ${
-                          user.lastSeenIsToday
-                            ? "Today at " + user.lastSeen
-                            : user.lastSeenDayLong +' '+ user.lastSeen
-                        }`}
-                  </span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+    <>
+      <div className="p-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search people..."
+            className="w-full pl-10 pr-4 py-3 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
       </div>
-    </div>
+
+      <div className="flex-1 overflow-y-auto">
+        {users.map((user) => (
+          <div
+            key={user.id}
+            onClick={() => {
+              setSelectedUser(user);
+              setSidebarOpen(false);
+            }}
+            className={`flex items-center px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 transition ${
+              selectedUser?.id === user.id ? "bg-indigo-50" : ""
+            }`}
+          >
+            <div className="relative">
+              <img
+                className="w-12 h-12 rounded-full object-cover"
+                src={user.photoURL || "https://i.imgur.com/6VBx3io.png"}
+                alt={user.displayName}
+              />
+              {user.online ? (
+                <Circle className="absolute bottom-0 right-0 w-4 h-4 fill-green-500 text-green-500 border-2 border-white rounded-full" />
+              ) : (
+                <Circle className="absolute bottom-0 right-0 w-4 h-4 fill-gray-400 text-gray-400 border-2 border-white rounded-full" />
+              )}
+            </div>
+            <div className="ml-4 flex-1">
+              <div className="flex justify-between">
+                <h3 className="text-sm font-medium">{user.displayName || "User"}</h3>
+                <span className="text-xs text-gray-500">{user.online ? "Online" : user.lastSeenTime}</span>
+              </div>
+              <p className="text-sm text-gray-500">
+                {user.online ? "Active now" : `Last seen ${user.lastSeenTime}`}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 };
 
