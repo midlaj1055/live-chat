@@ -121,8 +121,9 @@ const Chat = ({ selectedUser, setSidebarOpen }) => {
                 }`}
               >
                 <p className="text-sm break-words">{msg.text}</p>
+              </div>
                 <div className="flex items-center justify-between mt-2 gap-2">
-                  <p className={`text-xs ${msg.senderId === currentUser.uid ? "text-indigo-100" : "text-gray-500"}`}>
+                  <p className={`text-xs ${msg.senderId === currentUser.uid ? "text-gray-900" : "text-gray-500"}`}>
                     {msg.timestamp ? formatTimestamp(msg.timestamp) : ""}
                   </p>
                   {msg.senderId === currentUser.uid && (
@@ -151,7 +152,6 @@ const Chat = ({ selectedUser, setSidebarOpen }) => {
                     </div>
                   )}
                 </div>
-              </div>
             </div>
           </div>
         ))}
