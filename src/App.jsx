@@ -34,7 +34,7 @@ function App() {
       {/* Main Chat */}
       <div className="flex-1 flex flex-col">
         {selectedUser ? (
-          <Chat selectedUser={selectedUser} />
+          <Chat selectedUser={selectedUser} setSidebarOpen={setSidebarOpen} />
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <div className="text-center">
