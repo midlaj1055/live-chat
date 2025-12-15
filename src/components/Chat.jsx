@@ -161,15 +161,59 @@ const Chat = ({ selectedUser, setSidebarOpen }) => {
   useEffect(() => {
     setLoading(true);
     const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp"));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const msgs = [];
-      snapshot.forEach((d) => msgs.push({ id: d.id, ...d.data() }));
-      setMessages(msgs);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching messages:", error);
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgs = [];
+        snapshot.forEach((d) => msgs.push({ id: d.id, ...d.data() }));
+        setMessages(msgs);
+        setLoading(false);
+
+        // Notify on newly added messages (not sent by current user)
+        try {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+              const m = { id: change.doc.id, ...change.doc.data() };
+              if (m.senderId !== currentUser.uid) {
+                const pageVisible = document.visibilityState === "visible";
+                // Only notify when page not visible (or you can always notify)
+                if (!pageVisible) {
+                  const title = selectedUser.displayName || "New message";
+                  const options = {
+                    body: m.text || "New message",
+                    icon: selectedUser.photoURL || "/live-chat/favicon.ico",
+                    tag: `chat-${chatId}`,
+                    renotify: true,
+                  };
+
+                  // Prefer Service Worker notification if available
+                  if ("serviceWorker" in navigator && navigator.serviceWorker.getRegistration) {
+                    navigator.serviceWorker.getRegistration().then((reg) => {
+                      if (reg && reg.showNotification) {
+                        reg.showNotification(title, options);
+                      } else if (Notification.permission === "granted") {
+                        new Notification(title, options);
+                      }
+                    }).catch(() => {
+                      if (Notification.permission === "granted") new Notification(title, options);
+                    });
+                  } else {
+                    if (Notification.permission === "granted") new Notification(title, options);
+                  }
+                }
+              }
+            }
+          });
+        } catch (err) {
+          // ignore notification errors
+          console.error("Notification error:", err);
+        }
+      },
+      (error) => {
+        console.error("Error fetching messages:", error);
+        setLoading(false);
+      }
+    );
 
     return unsub;
   }, [chatId]);
@@ -178,6 +222,19 @@ const Chat = ({ selectedUser, setSidebarOpen }) => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      try {
+        Notification.requestPermission().then((perm) => {
+          console.log("Notification permission:", perm);
+        });
+      } catch (e) {
+        // Some browsers may throw for requestPermission
+      }
+    }
+  }, []);
 
   // Send message (with optional reply)
   const sendMessage = async (e) => {
